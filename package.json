@@ -1,0 +1,10 @@
+{
+  "name": "media-consent-delivery",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --experimental-strip-types src/media_service.ts",
+    "test": "node --experimental-strip-types src/consent.test.ts"
+  },
+  "dependencies": { "zod": "^3.23.8" }
+}
