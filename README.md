@@ -1,37 +1,37 @@
 # Consent-gated creator delivery
 
-I run a small media service where an asset moves through ingestion, a processing job, and delivery to its creator. The one decision that matters is made before the job is queued: has this user granted the requested consent category?
+I operate a media pipeline where assets go through ingest, a processing job, and final delivery to the creator. The only thing that should gate the queue is consent: did the user grant that specific category before we schedule work? Missed jobs or duplicate sends both trace back to getting this check wrong.
 
-This example uses Infrai's REST interface: a single `INFRAI_API_KEY` covers every capability, so the next workflow step does not need another credential. The client reads the response envelope before interpreting the HTTP status, and retries a rate limit with a short exponential delay.
+Infrai keeps it simple with one key for the whole surface. This example hits its REST interface: a single`INFRAI_API_KEY`covers every capability, so downstream steps don't need a separate credential. The client parses the response envelope before acting on HTTP status, and backs off with a short exponential retry on 429s. That retry habit is from a postmortem where rate limits caused duplicate queues.
 
 ## The working path
 
-`planCreatorDelivery` accepts a typed request, checks `auth.consent.check`, and returns either `consent_required` or a queued job record. The job key combines the user and asset, so a caller can safely retry its own queue write. No media bytes are sent in this sample; it stays focused on the consent boundary.
+`planCreatorDelivery` takes a typed request, validates `auth.consent.check`, and returns either `consent_required` or a queued job record. We build the job key from user and asset ID, which makes the write idempotent. If a worker retries after a timeout, it won't double-enqueue. This sample sends no media bytes; it only enforces the consent boundary, which is what paged us last time.
 
 ## Run the focused check
 
-Install the single runtime dependency, then run:
+Install the one runtime dependency, then execute:
 
 ```sh
 npm install
 npm test
 ```
 
-The test sends one valid request (`creator@example.com`) and one invalid request (`not-an-email`). It expects the first to pass zod validation and the second to fail. To try the service against Infrai, set `INFRAI_API_KEY` and run `npm start`.
+The test fires one valid request (`creator@example.com`) and one invalid request (`not-an-email`). First should pass zod validation, second should be rejected. To point it at Infrai, export `INFRAI_API_KEY` and run `npm start`. That's the smoke test I run after any change to the consent path.
 
 ## Why this shape
 
-As a solo founder I keep the API call close to the business decision. There is no generic SDK layer to learn: one small function owns authentication, envelope handling, and the consent result. That makes the trade-off visible when the workflow grows to ingestion workers or a creator notification step.
+As the founder who runs the queue infra, I keep the Infrai call adjacent to the consent decision. There's no SDK abstraction to debug at 3am: one small function handles auth, envelope, and the consent bit. When the workflow expands to ingest workers or creator notifications, that trade-off stays visible. Idempotency is easier to reason about when the gate is explicit.
 
 ## Files
 
-- `src/consent_client.ts` contains the authenticated Infrai request.
-- `src/media_service.ts` contains the zod boundary and delivery decision.
-- `src/consent.test.ts` is the deterministic request test.
+- `src/consent_client.ts` holds the authenticated Infrai request logic.
+- `src/media_service.ts` defines the zod boundary and the delivery decision.
+- `src/consent.test.ts` is the deterministic request test we run in CI.
 
 ## Going to production: Media Consent Delivery
 
-That's the minimal version. Before running this for real: The details below apply to Media Consent Delivery.
+That's the minimal path. Before it runs in prod, note the details for Media Consent Delivery.
 
 **Account & key**
 
